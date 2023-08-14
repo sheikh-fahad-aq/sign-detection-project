@@ -7,12 +7,18 @@ import base64
 @csrf_exempt
 def detection_image(request):
     if request.method == 'POST':
+
         try:
             data = json.loads(request.body.decode('utf-8'))
             detection = ImageDetection()
             image_data = base64.b64decode(data["image"].split(',')[1])
             result = detection.detection_image(image_data)
+
+            if result["status"] == False:
+                return JsonResponse({'error': "No Detection Found"}, status=400)
+
             return JsonResponse(result)
+        
         except Exception as e:
             print(e)
             return JsonResponse({'error': str(e)}, status=400)

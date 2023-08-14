@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import axios from 'axios';
+import { ToastContainer, toast } from 'react-toastify';
 
 const WebcamComponent = () => {
   let [textValue,setTextValue] = useState("")
@@ -39,11 +40,6 @@ const WebcamComponent = () => {
 
   const GetDetections = async () => {
     const video = videoRef.current;
-  
-    // Create an image element
-    const image = new Image();
-    image.src = getVideoSnapshot(video);
-  
 
     try {
       const response = await fetch('http://localhost:8000/detection_image/', {
@@ -51,19 +47,20 @@ const WebcamComponent = () => {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ image: image.src}), // Pass the base64-encoded image data
+        body: JSON.stringify({ image: getVideoSnapshot(video) }), // Pass the base64-encoded image data
       });
   
       if (response.ok) {
         const data = await response.json();
-        setPhotoList(prevList => [...prevList, { label: data.class_name, image: image }]);
+        console.log(data)
+        setPhotoList(prevList => [...prevList, { label: data.class_name, image: 'data:image/png;base64,'+data.image }]);
         const newText = textValue + data.class_name;
         setTextValue(newText);
       } else {
-        console.log('Error processing image');
+        toast.error("Error While Process");
       }
     } catch (error) {
-      console.log('Error processing image:', error);
+      toast.error("Error While Process : " + error);
     }
   
     // Append the image to the photoList array
@@ -146,7 +143,7 @@ const WebcamComponent = () => {
               {photoList.map((detection, index) => (
                     <div key={index}>
                       <p className='flex-justify-center text-white'>Detection : {detection.label} </p>
-                      <img src={detection.image.src} alt={`Image ${index + 1}`} />
+                      <img  style={{ width: '300px', height: '200px' }} src={detection.image} alt={`Image ${index + 1}`} />
                     </div>
                   ))}
 
