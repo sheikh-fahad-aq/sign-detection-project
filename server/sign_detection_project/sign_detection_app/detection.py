@@ -21,32 +21,46 @@ class ImageDetection:
         self.highest_probability = 0
         self.image = None
 
-    @tf.function(reduce_retracing=True)
     def detection_image(self, image_data):
+        image = tf.image.decode_image(image_data, channels=3)  # Assuming 3 channels for RGB
+        image_copy = image.numpy()
 
-        image_bytes = bytes(image_data)
-        # Convert bytes to a numpy array
-        image_np_array = np.frombuffer(image_bytes, np.uint8)
+        # Convert RGB to BGR (OpenCV uses BGR color format)
+        image_bgr = cv2.cvtColor(image_copy, cv2.COLOR_RGB2BGR)
 
-        # Decode the image using cv2.imdecode()
-        image_cv2 = cv2.imdecode(image_np_array, cv2.IMREAD_COLOR)
-        hands, img = self.detector.findHands(image_cv2, draw=True)
+        # Find hands in the image using the HandDetector
+        hands = self.detector.findHands(image_bgr, draw=False)
 
-        if len(hands) == 1:
+        # Display the annotated image with hand landmarks
+        # cv2.imshow("Hand Detection", img_with_hands)
+        # cv2.waitKey(0)
+        # cv2.destroyAllWindows()
+
+        if len(hands) >= 1:
             hand1 = hands[0]
             lmList1 = hand1["lmList"]  # List of 21 Landmark points
             bbox1 = hand1["bbox"]  # Bounding box info x,y,w,h
             x, y, w, h = bbox1
-    
-            # Crop the image using the bounding box coordinates
-            cropped_hand = img[y:y+h, x:x+w]
-            
-            clone = cropped_hand.copy()
-            clone_resized = cv2.resize(clone, (64,64))
-            img_array=clone_resized/255
-            image = np.expand_dims(img_array, axis=0) 
+
+            # Calculate crop coordinates
+            x1 = x
+            y1 = y
+            x2 = x + w
+            y2 = y + h
+
+            # Crop the resized image tensor using slicing
+            cropped_image = image_bgr[y1-20:y2+20, x1-20:x2+20, :]
+
+            cv2.imshow("Hand Detection", cropped_image)
+            cv2.waitKey(0)
+            cv2.destroyAllWindows()
+
+            image = tf.image.resize(cropped_image, (64, 64))
+            image = tf.expand_dims(image, axis=0)
+
 
             predictions = self.model.predict(image)
+            print(predictions)
             predicted_class_index = np.argmax(predictions)
             predicted_class_label = self.labels[predicted_class_index]
             highest_probability = predictions[0, predicted_class_index]
@@ -54,7 +68,7 @@ class ImageDetection:
             self.status = True
             self.predicted_class_label = predicted_class_label
             self.highest_probability = float(highest_probability)
-            self.image = self.np_to_base_image(cropped_hand)
+            self.image = self.np_to_base_image(image_copy)
            
         return {
                 'class_name': self.predicted_class_label,

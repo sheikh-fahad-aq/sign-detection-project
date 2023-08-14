@@ -11,8 +11,7 @@ def detection_image(request):
         try:
             data = json.loads(request.body.decode('utf-8'))
             detection = ImageDetection()
-            image_data = base64.b64decode(data["image"].split(',')[1])
-            result = detection.detection_image(image_data)
+            result = detection.detection_image(base64.b64decode(data["image"].split(',')[1]))
 
             if result["status"] == False:
                 return JsonResponse({'error': "No Detection Found"}, status=400)
