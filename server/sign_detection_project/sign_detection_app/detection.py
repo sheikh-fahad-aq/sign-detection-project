@@ -11,9 +11,10 @@ import base64
 
 class ImageDetection:
     def __init__(self):
-        self.labels = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z', 'space', 'space', 'space']
-        model_path = os.path.join(settings.BASE_DIR, settings.BASE_DIR, 'src', "models", 'tensorflow_detection_sign' , 'model_fingerspelling_V6.h5')
-        print(model_path)
+        self.labels =  {'A':0,'B':1,'C':2,'D':3,'E':4,'F':5,'G':6,'H':7,'I':8,'J':9,'K':10,'L':11,'M':12,
+                    'N':13,'O':14,'P':15,'Q':16,'R':17,'S':18,'T':19,'U':20,'V':21,'W':22,'X':23,'Y':24,
+                    'Z':25,'space':26,'del':27,'nothing':28}
+        model_path = os.path.join(settings.BASE_DIR, settings.BASE_DIR, 'src', "models", 'tensorflow_detection_sign' , 'model_2.h5')
         self.model = load_model(model_path)
         self.detector = HandDetector(detectionCon=0.8, maxHands=2)
         self.status = False
@@ -21,40 +22,41 @@ class ImageDetection:
         self.highest_probability = 0
         self.image = None
 
-    @tf.function(reduce_retracing=True)
     def detection_image(self, image_data):
 
         image_bytes = bytes(image_data)
         # Convert bytes to a numpy array
         image_np_array = np.frombuffer(image_bytes, np.uint8)
-
         # Decode the image using cv2.imdecode()
         image_cv2 = cv2.imdecode(image_np_array, cv2.IMREAD_COLOR)
-        hands, img = self.detector.findHands(image_cv2, draw=True)
+        image_data = image_cv2.copy()
+        hands, img = self.detector.findHands(image_data, draw=True)
 
         if len(hands) == 1:
             hand1 = hands[0]
             lmList1 = hand1["lmList"]  # List of 21 Landmark points
             bbox1 = hand1["bbox"]  # Bounding box info x,y,w,h
             x, y, w, h = bbox1
-    
             # Crop the image using the bounding box coordinates
-            cropped_hand = img[y:y+h, x:x+w]
-            
-            clone = cropped_hand.copy()
-            clone_resized = cv2.resize(clone, (64,64))
-            img_array=clone_resized/255
-            image = np.expand_dims(img_array, axis=0) 
+            cropped_hand = image_cv2[y-20:y+h+20, x-20:x+w+20]
+            cropped_hand_copy = cropped_hand.copy()
 
-            predictions = self.model.predict(image)
-            predicted_class_index = np.argmax(predictions)
-            predicted_class_label = self.labels[predicted_class_index]
-            highest_probability = predictions[0, predicted_class_index]
+            image = self.load_image(cropped_hand_copy)
+            image = cv2.resize(image, (224, 224))  # Resize to match the expected input shape
 
-            self.status = True
-            self.predicted_class_label = predicted_class_label
-            self.highest_probability = float(highest_probability)
-            self.image = self.np_to_base_image(cropped_hand)
+            image = np.reshape(image, (1,) + image.shape)
+
+            # make predictions on an image and append it to the list (predictions).
+            predicted_class_index = np.argmax(self.model.predict(image), axis=1)
+     
+            # Now you have the predicted class label
+            if len(predicted_class_index) > 0:
+                predicted_class_label = self.find_keys_by_value(self.labels,predicted_class_index[0])
+                self.status = True
+                self.predicted_class_label = predicted_class_label
+                self.highest_probability = float(100.00)
+                self.image = self.np_to_base_image(cropped_hand)
+
            
         return {
                 'class_name': self.predicted_class_label,
@@ -64,12 +66,25 @@ class ImageDetection:
             }
     
     def np_to_base_image(self, image_array):
-        pil_image = Image.fromarray(image_array)
-        image_bytes = BytesIO()
-        pil_image.save(image_bytes, format="PNG")
-        image_bytes = image_bytes.getvalue()
-        
-        # Ensure there's no leading or trailing whitespace in the base64-encoded string
-        base64_encoded = base64.b64encode(image_bytes).decode("utf-8").strip()
-        
-        return base64_encoded
+        _, buffer = cv2.imencode('.jpg', image_array)
+        # Convert the image buffer to a base64 encoded string
+        base64_image = base64.b64encode(buffer).decode('utf-8').strip()
+
+        return base64_image
+
+    def find_keys_by_value(self,dictionary, value):
+        keys_with_value = []
+        for key, val in dictionary.items():
+            if val == value:
+                keys_with_value.append(key)
+        return keys_with_value
+
+    def load_image(self,image):
+        images = []
+        names = []
+        size = 64,64
+        temp = cv2.resize(image, size)
+        images.append(temp)
+        images = np.array(images)
+        images = images.astype('float32')/255.0
+        return images[0]
